@@ -9,6 +9,7 @@ import subprocess
 from pathlib import Path
 
 from shared.process import base_ffmpeg_args
+from shared.receiver import DeviceError
 
 log = logging.getLogger(__name__)
 
@@ -19,10 +20,6 @@ _MODULE_SYS = Path("/sys/module/v4l2loopback")
 # formats browsers read most reliably.
 PIXEL_FORMATS = {"YU12": "yuv420p", "YUYV": "yuyv422", "NV12": "nv12", "RGB3": "rgb24", "BGR3": "bgr24"}
 _FOURCC = re.compile(r"\[\d+\]:\s+'(\w{3,4})\s*'")
-
-
-class DeviceError(Exception):
-    """A virtual device problem that retrying will not fix."""
 
 
 def parse_output_formats(text: str) -> list[str]:

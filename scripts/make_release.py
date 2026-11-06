@@ -1,4 +1,4 @@
-"""Assemble dist/release from the built exe and the repo sources.
+"""Assemble dist/release from the built exes and the repo sources.
 
 Produces the exact file names the in-app updater looks for, plus SHA256SUMS.txt.
 """
@@ -13,7 +13,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from shared.updater import CHECKSUM_ASSET, UBUNTU_ASSET, WINDOWS_ASSET  # noqa: E402
+from shared.updater import (  # noqa: E402
+    CHECKSUM_ASSET, UBUNTU_ASSET, WINDOWS_ASSET, WINDOWS_CLIENT_ASSET,
+)
 from shared.version import __version__  # noqa: E402
 
 UBUNTU_CONTENT = ("shared", "ubuntu-client", "scripts", "README.md")
@@ -28,22 +30,24 @@ def _clean(info: tarfile.TarInfo):
 
 
 def main() -> int:
-    exe = ROOT / "dist" / WINDOWS_ASSET
-    if not exe.is_file():
-        print(f"Missing {exe}. Run scripts/build_windows.ps1 first.", file=sys.stderr)
-        return 1
+    exes = [ROOT / "dist" / name for name in (WINDOWS_ASSET, WINDOWS_CLIENT_ASSET)]
+    for exe in exes:
+        if not exe.is_file():
+            print(f"Missing {exe}. Build both Windows apps first.", file=sys.stderr)
+            return 1
 
     output = ROOT / "dist" / "release"
     shutil.rmtree(output, ignore_errors=True)
     output.mkdir(parents=True)
 
-    shutil.copy2(exe, output / WINDOWS_ASSET)
+    for exe in exes:
+        shutil.copy2(exe, output / exe.name)
     with tarfile.open(output / UBUNTU_ASSET, "w:gz") as archive:
         for name in UBUNTU_CONTENT:
             archive.add(ROOT / name, arcname=name, filter=_clean)
 
     lines = []
-    for name in (WINDOWS_ASSET, UBUNTU_ASSET):
+    for name in (WINDOWS_ASSET, WINDOWS_CLIENT_ASSET, UBUNTU_ASSET):
         digest = hashlib.sha256((output / name).read_bytes()).hexdigest()
         lines.append(f"{digest}  {name}\n")
     (output / CHECKSUM_ASSET).write_text("".join(lines), encoding="ascii", newline="\n")

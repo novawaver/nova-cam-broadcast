@@ -59,14 +59,17 @@ def find_ffmpeg(configured: str = "") -> Optional[str]:
     return None
 
 
-def base_ffmpeg_args(ffmpeg: str) -> list[str]:
+def base_ffmpeg_args(ffmpeg: str, progress: bool = True) -> list[str]:
     """Arguments common to every stream.
 
     ``-progress pipe:1`` provides the data-flow signal used for real connection
-    state. Windows keeps stdin open so a graceful ``q`` can be sent; on Linux
-    SIGTERM does that job, so stdin is disabled.
+    state. Pass ``progress=False`` when stdout carries media instead. Windows
+    keeps stdin open so a graceful ``q`` can be sent; on Linux SIGTERM does that
+    job, so stdin is disabled.
     """
-    args = [ffmpeg, "-hide_banner", "-nostats", "-loglevel", "warning", "-progress", "pipe:1"]
+    args = [ffmpeg, "-hide_banner", "-nostats", "-loglevel", "warning"]
+    if progress:
+        args += ["-progress", "pipe:1"]
     if not WINDOWS:
         args.append("-nostdin")
     return args
@@ -216,7 +219,7 @@ class FFmpegProcess:
         self.started_at = time.monotonic()
         if WINDOWS:
             _assign_to_job(self._proc)
-        for target in (self._read_stderr, self._read_progress):
+        for target in (self._read_stderr, self._read_stdout):
             thread = threading.Thread(target=target, daemon=True)
             thread.start()
             self._readers.append(thread)
@@ -234,7 +237,7 @@ class FFmpegProcess:
             if self._on_line:
                 self._on_line(line)
 
-    def _read_progress(self) -> None:
+    def _read_stdout(self) -> None:
         for raw in self._proc.stdout:
             key, sep, value = raw.decode("ascii", "replace").strip().partition("=")
             if not sep:

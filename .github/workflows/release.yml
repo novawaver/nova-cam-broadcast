@@ -45,6 +45,9 @@ jobs:
       - name: Build the Windows server
         run: powershell -ExecutionPolicy Bypass -File scripts\build_windows.ps1
 
+      - name: Build the Windows client
+        run: powershell -ExecutionPolicy Bypass -File scripts\build_windows_client.ps1
+
       - name: Test
         run: |
           .venv\Scripts\python.exe -m pip install --quiet pytest
@@ -59,7 +62,7 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Sign the exe
+      - name: Sign the exes
         if: env.SIGNING_ENABLED == 'true'
         uses: azure/artifact-signing-action@v2
         with:
@@ -86,11 +89,15 @@ jobs:
 
       - name: Verify the signature
         if: env.SIGNING_ENABLED == 'true'
-        run: powershell -ExecutionPolicy Bypass -File scripts\verify_signature.ps1 dist\BroadcastServer.exe
+        run: |
+          foreach ($exe in 'BroadcastServer', 'BroadcastClient') {
+            powershell -ExecutionPolicy Bypass -File scripts\verify_signature.ps1 "dist\$exe.exe"
+            if ($LASTEXITCODE -ne 0) { throw "$exe is not validly signed." }
+          }
 
       - name: Warn about an unsigned build
         if: env.SIGNING_ENABLED != 'true'
-        run: Write-Output "::warning::Publishing an unsigned exe. Set up code signing as described in README.md."
+        run: Write-Output "::warning::Publishing unsigned exes. Set up code signing as described in README.md."
 
       # After signing, because signing changes the exe and so its checksum.
       - name: Assemble the release files
@@ -102,6 +109,7 @@ jobs:
         run: |
           gh release create $env:GITHUB_REF_NAME --verify-tag --generate-notes `
             dist\release\BroadcastServer.exe `
+            dist\release\BroadcastClient.exe `
             dist\release\nvidia-broadcast-bridge-ubuntu.tar.gz `
             dist\release\SHA256SUMS.txt
           if ($LASTEXITCODE -ne 0) { throw 'Could not publish the release.' }

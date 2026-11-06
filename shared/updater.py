@@ -33,6 +33,7 @@ log = logging.getLogger(__name__)
 API_LATEST = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 CHECKSUM_ASSET = "SHA256SUMS.txt"
 WINDOWS_ASSET = "BroadcastServer.exe"
+WINDOWS_CLIENT_ASSET = "BroadcastClient.exe"
 UBUNTU_ASSET = "nvidia-broadcast-bridge-ubuntu.tar.gz"
 
 _TIMEOUT = 20
@@ -228,9 +229,8 @@ class WindowsInstaller:
     renaming it, so the old file is moved aside and removed by the next launch.
     """
 
-    asset_name = WINDOWS_ASSET
-
-    def __init__(self, executable: Optional[Path] = None) -> None:
+    def __init__(self, executable: Optional[Path] = None, asset_name: str = WINDOWS_ASSET) -> None:
+        self.asset_name = asset_name
         self.executable = Path(executable or sys.executable)
         self.previous = self.executable.with_name(self.executable.name + ".old")
         self.download_path = self.executable.with_name(self.executable.name + ".download")

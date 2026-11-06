@@ -1,11 +1,12 @@
 # NVIDIA Broadcast Bridge
 
-Use the NVIDIA Broadcast camera and microphone from a Windows 11 host inside an Ubuntu VirtualBox VM, without OBS Studio.
+Use the NVIDIA Broadcast camera and microphone from a Windows 11 host inside a VirtualBox VM, without OBS Studio.
 
 | Application | Runs on | Job |
 | --- | --- | --- |
 | **Broadcast Server** | Windows host | Captures both devices and serves them on TCP ports 9000 and 9001 |
 | **Broadcast Client** | Ubuntu guest | Receives both streams and exposes `/dev/video10` and a virtual microphone |
+| **Broadcast Client for Windows** | Windows 11 guest | Receives the camera stream and exposes a virtual camera |
 
 ```text
 Windows                                          Ubuntu (VirtualBox NAT)
@@ -94,7 +95,7 @@ Settings and logs are stored in `%APPDATA%\nvidia-broadcast-bridge` on Windows a
 
 Both apps check GitHub for a new release a few seconds after launch. If there is one, you choose **Update Now**, **Skip This Version** or **Later**. Nothing installs without your click, because updating stops any active streams and restarts the app. **Check for Updates** runs the same check on demand, and you can turn off the launch check in **Settings**.
 
-Update the Windows server and Ubuntu client to the same version.
+Update the server and client to the same version.
 
 | How you run it | What updating does |
 | --- | --- |
@@ -165,6 +166,24 @@ Run this end to end on the real setup. To exercise a real audio path, record and
 | 12 | Occupy port 9000, then start the camera | Red, naming the process that holds the port |
 | 13 | Close NVIDIA Broadcast while streaming | The camera reports an error; the microphone is handled independently |
 
+## Windows 11 VM
+
+To use the camera in a Windows 11 VM, keep Broadcast Server running on the host as usual. In the VM:
+
+1. Install FFmpeg: `winget install Gyan.FFmpeg`.
+2. Download `BroadcastClient.exe` from the [latest release](https://github.com/novawaver/nova-cam-broadcast/releases/latest) and run it.
+3. Click **Install Camera** and approve the Windows prompt. You only do this once.
+4. Click **Connect Camera**. The status turns green when video is flowing.
+5. Choose **NVIDIA Broadcast (Windows Virtual Camera)** in your app.
+
+If the checks show **Camera privacy** in red, turn on camera access in **Settings > Privacy & security > Camera**, including **Let desktop apps access your camera**.
+
+**The microphone isn't carried by this client.** Windows needs a signed audio driver for a virtual microphone. Turn on **Enable Audio Input** in the VM's VirtualBox audio settings to use the host's default microphone instead.
+
+The camera is 1280 × 720 at 30 FPS. Without a live stream, it shows black. **Remove Camera** uninstalls it. Any local user on the VM can read the camera's frames, because they pass through a shared file in `C:\ProgramData\NvidiaBroadcastBridge`.
+
+To build from source, install the Visual Studio C++ build tools, then run `scripts\build_windows.ps1` followed by `scripts\build_windows_client.ps1`.
+
 ## Publishing a release
 
 Releases are built and published automatically by [.github/workflows/release.yml](.github/workflows/release.yml). You never upload files by hand.
@@ -173,12 +192,12 @@ Releases are built and published automatically by [.github/workflows/release.yml
 2. Commit, tag and push. The tag must match the version:
    ```bash
    git add -A
-   git commit -m "Release 0.1.0"
-   git tag v0.1.0
-   git push origin main v0.1.0
+   git commit -m "Release 0.1.1"
+   git tag v0.1.1
+   git push origin main v0.1.1
    ```
 
-GitHub then builds the exe, runs the tests, signs the exe if signing is set up, and publishes the release with all three files. Watch it on the repository's **Actions** tab. If the tag and `shared/version.py` don't match, or a test fails, nothing is published.
+GitHub then builds both exes, runs the tests, signs the exes if signing is set up, and publishes the release with all four files. Watch it on the repository's **Actions** tab. If the tag and `shared/version.py` don't match, or a test fails, nothing is published.
 
 To build the same files locally without publishing, run `powershell -ExecutionPolicy Bypass -File scripts\build_release.ps1`. They're written to `dist\release`.
 

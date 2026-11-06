@@ -30,12 +30,13 @@ class UpdateController(QObject):
     _progress = Signal(int, int)
     _finished = Signal(bool, str)  # installed, error
 
-    def __init__(self, window: QWidget, settings, on_installed: Callable[[list], None]) -> None:
+    def __init__(self, window: QWidget, settings, on_installed: Callable[[list], None],
+                 installer=None) -> None:
         super().__init__(window)
         self.window = window
         self.settings = settings
         self.on_installed = on_installed
-        self.installer = updater.current_installer()
+        self.installer = installer or updater.current_installer()
         self._busy = False
         self._cancel = threading.Event()
         self._dialog: QProgressDialog | None = None

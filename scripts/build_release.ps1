@@ -7,6 +7,9 @@ Set-Location $repo
 & powershell -ExecutionPolicy Bypass -File scripts\build_windows.ps1
 if ($LASTEXITCODE -ne 0) { throw 'The Windows build failed.' }
 
+& powershell -ExecutionPolicy Bypass -File scripts\build_windows_client.ps1
+if ($LASTEXITCODE -ne 0) { throw 'The Windows client build failed.' }
+
 & .venv\Scripts\python.exe -m pip install --quiet pytest
 & .venv\Scripts\python.exe -m pytest tests -q
 if ($LASTEXITCODE -ne 0) { throw 'Tests failed; not creating a release.' }
