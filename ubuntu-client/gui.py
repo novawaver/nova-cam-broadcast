@@ -8,12 +8,14 @@ import threading
 from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtWidgets import (
     QApplication, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QLabel,
-    QLineEdit, QMainWindow, QMessageBox, QPushButton, QSpinBox, QVBoxLayout, QWidget,
+    QCheckBox, QLineEdit, QMainWindow, QMessageBox, QPushButton, QSpinBox, QVBoxLayout, QWidget,
 )
 
 from connection_manager import CAMERA, MICROPHONE, ConnectionManager, run_diagnostics
 from shared.config import APP_NAME, AUDIO_SAMPLE_RATE
 from shared.stream_worker import StreamState
+from shared.update_ui import UpdateController
+from shared.version import __version__
 from shared.widgets import GREEN, RED, STYLESHEET, LogPanel, StreamCard, make_icon
 
 LABELS = {
@@ -51,6 +53,8 @@ class SettingsDialog(QDialog):
         self.video_device = QLineEdit(settings.video_device)
         self.ffmpeg_path = QLineEdit(settings.ffmpeg_path)
         self.ffmpeg_path.setPlaceholderText("Automatic")
+        self.updates = QCheckBox("Check for updates on launch")
+        self.updates.setChecked(settings.check_for_updates)
 
         form = QFormLayout()
         form.addRow("Windows host", self.host)
@@ -61,6 +65,7 @@ class SettingsDialog(QDialog):
         form.addRow("Output FPS", self.fps_box)
         form.addRow("Video device", self.video_device)
         form.addRow("FFmpeg", self.ffmpeg_path)
+        form.addRow(self.updates)
 
         note = QLabel("Changes apply the next time a stream connects.")
         note.setObjectName("muted")
@@ -98,6 +103,7 @@ class SettingsDialog(QDialog):
         s.fps = self.fps_box.value()
         s.video_device = self.video_device.text().strip() or "/dev/video10"
         s.ffmpeg_path = self.ffmpeg_path.text().strip()
+        s.check_for_updates = self.updates.isChecked()
         s.save()
         self.accept()
 
@@ -108,6 +114,7 @@ class MainWindow(QMainWindow):
         self.settings = settings
         self._states = {CAMERA: StreamState.STOPPED, MICROPHONE: StreamState.STOPPED}
         self._shut_down = False
+        self.restart_command = None  # set when an update needs a relaunch
 
         self.bridge = Bridge()
         self.bridge.state_changed.connect(self._on_state)
@@ -117,7 +124,7 @@ class MainWindow(QMainWindow):
             settings, self.bridge.state_changed.emit, self.bridge.log_line.emit
         )
 
-        self.setWindowTitle(f"{APP_NAME} — Ubuntu Client")
+        self.setWindowTitle(f"{APP_NAME} {__version__} — Ubuntu Client")
         self.setWindowIcon(make_icon())
         self.setStyleSheet(STYLESHEET)
         self.resize(500, 780)
@@ -158,6 +165,8 @@ class MainWindow(QMainWindow):
         tools_row = QHBoxLayout()
         tools_row.addWidget(self.refresh_button)
         tools_row.addWidget(settings_button)
+        updates_button = QPushButton("Check for Updates")
+        tools_row.addWidget(updates_button)
 
         self.checks_label = QLabel("Checking system…")
         self.checks_label.setWordWrap(True)
@@ -178,11 +187,19 @@ class MainWindow(QMainWindow):
         root.setLayout(layout)
         self.setCentralWidget(root)
 
+        self.updates = UpdateController(self, settings, self._restart_for_update)
+        updates_button.clicked.connect(lambda: self.updates.check(manual=True))
+
         self._refresh_info()
         self._update_connection()
         self._run_checks()
+        self.updates.start()
 
     # --- lifecycle ------------------------------------------------------------
+
+    def _restart_for_update(self, command: list) -> None:
+        self.restart_command = command
+        self.close()
 
     def closeEvent(self, event) -> None:
         self.shutdown()

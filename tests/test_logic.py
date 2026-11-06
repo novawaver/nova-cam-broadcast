@@ -93,6 +93,12 @@ def test_error_summaries():
     assert "not found" in stream_manager.summarize_error(
         ["Could not find video device with name [X] among source devices of type video."]
     )
+    # Real FFmpeg 9.0.2 output when no capture devices exist; the I/O error that
+    # follows it must not turn this into an "in use" message.
+    assert "not found" in stream_manager.summarize_error([
+        "[in#0 @ 0000026a] Could not enumerate video devices (or none found).",
+        "[in#0 @ 0000026a] Error opening input: I/O error",
+    ])
     assert "resolution" in stream_manager.summarize_error(["Could not set video options"])
     assert stream_manager.summarize_error([]) == "FFmpeg exited unexpectedly."
 

@@ -23,3 +23,5 @@ class ClientSettings(JsonSettings):
     video_device: str = "/dev/video10"
     microphone_name: str = "NVIDIA Broadcast Microphone"
     ffmpeg_path: str = ""
+    check_for_updates: bool = True
+    skipped_version: str = ""

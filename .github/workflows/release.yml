@@ -1,0 +1,107 @@
+# Pushing a tag such as v0.1.0 builds, tests, signs and publishes a release.
+#
+# Signing runs once the repository variable ARTIFACT_SIGNING_ACCOUNT is set.
+# Until then the release is published unsigned, with a warning on the run.
+# Setup: see "Code signing" in README.md.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: windows-2025
+    # Azure trusts this workflow through the environment name, so one federated
+    # credential covers every future tag.
+    environment: release
+    permissions:
+      contents: write # publish the release
+      id-token: write # sign in to Azure without a stored secret
+    env:
+      SIGNING_ENABLED: ${{ vars.ARTIFACT_SIGNING_ACCOUNT != '' }}
+    steps:
+      # Windows runners default to CRLF, which would end up in the Ubuntu archive.
+      - name: Keep LF line endings
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check the tag matches shared/version.py
+        run: |
+          $version = python -c "from shared.version import __version__; print(__version__)"
+          if ("v$version" -ne $env:GITHUB_REF_NAME) {
+            throw "Tag $env:GITHUB_REF_NAME does not match version $version in shared/version.py."
+          }
+
+      - name: Build the Windows server
+        run: powershell -ExecutionPolicy Bypass -File scripts\build_windows.ps1
+
+      - name: Test
+        run: |
+          .venv\Scripts\python.exe -m pip install --quiet pytest
+          .venv\Scripts\python.exe -m pytest tests -q
+          if ($LASTEXITCODE -ne 0) { throw 'Tests failed.' }
+
+      - name: Sign in to Azure
+        if: env.SIGNING_ENABLED == 'true'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Sign the exe
+        if: env.SIGNING_ENABLED == 'true'
+        uses: azure/artifact-signing-action@v2
+        with:
+          endpoint: ${{ vars.ARTIFACT_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.ARTIFACT_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.ARTIFACT_SIGNING_PROFILE }}
+          files-folder: ${{ github.workspace }}\dist
+          files-folder-filter: exe
+          file-digest: SHA256
+          # Signing certificates last about three days. The timestamp is what
+          # keeps a signature valid after that.
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+          exclude-environment-credential: true
+          exclude-workload-identity-credential: true
+          exclude-managed-identity-credential: true
+          exclude-shared-token-cache-credential: true
+          exclude-visual-studio-credential: true
+          exclude-visual-studio-code-credential: true
+          exclude-azure-cli-credential: false
+          exclude-azure-powershell-credential: true
+          exclude-azure-developer-cli-credential: true
+          exclude-interactive-browser-credential: true
+
+      - name: Verify the signature
+        if: env.SIGNING_ENABLED == 'true'
+        run: powershell -ExecutionPolicy Bypass -File scripts\verify_signature.ps1 dist\BroadcastServer.exe
+
+      - name: Warn about an unsigned build
+        if: env.SIGNING_ENABLED != 'true'
+        run: Write-Output "::warning::Publishing an unsigned exe. Set up code signing as described in README.md."
+
+      # After signing, because signing changes the exe and so its checksum.
+      - name: Assemble the release files
+        run: .venv\Scripts\python.exe scripts\make_release.py
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME --verify-tag --generate-notes `
+            dist\release\BroadcastServer.exe `
+            dist\release\nvidia-broadcast-bridge-ubuntu.tar.gz `
+            dist\release\SHA256SUMS.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Could not publish the release.' }

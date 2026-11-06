@@ -17,9 +17,9 @@ Each stream has its own FFmpeg process and supervising thread, so one failing or
 
 ## Windows setup
 
-You need Python 3.11+ from python.org, FFmpeg, and NVIDIA Broadcast running.
+The easiest way is to download `BroadcastServer.exe` from the [latest release](https://github.com/novawaver/nova-cam-broadcast/releases/latest) and run it. You need FFmpeg installed and NVIDIA Broadcast running. Windows SmartScreen may warn you the first time. Choose **More info**, then **Run anyway**.
 
-Run from source:
+To run from source instead, you also need Python 3.11+ from python.org:
 
 ```powershell
 python -m venv .venv
@@ -37,11 +37,16 @@ FFmpeg is found automatically on `PATH`, next to the executable, or in the usual
 
 ## Ubuntu setup
 
-Copy or clone this repository into the VM, then run this as your normal user:
+Download `nvidia-broadcast-bridge-ubuntu.tar.gz` from the [latest release](https://github.com/novawaver/nova-cam-broadcast/releases/latest) into the VM, or clone this repository. Then run this as your normal user:
 
 ```bash
+mkdir nvidia-broadcast-bridge
+tar -xzf nvidia-broadcast-bridge-ubuntu.tar.gz -C nvidia-broadcast-bridge
+cd nvidia-broadcast-bridge
 bash scripts/install_ubuntu.sh
 ```
+
+If you cloned the repository, skip the `mkdir` and `tar` steps and run the last line from the repository folder.
 
 The installer:
 
@@ -84,6 +89,22 @@ python ubuntu-client/main.py --cli --host 10.0.2.2
 ```
 
 Settings and logs are stored in `%APPDATA%\nvidia-broadcast-bridge` on Windows and `~/.config/nvidia-broadcast-bridge` on Ubuntu.
+
+## Updates
+
+Both apps check GitHub for a new release a few seconds after launch. If there is one, you choose **Update Now**, **Skip This Version** or **Later**. Nothing installs without your click, because updating stops any active streams and restarts the app. **Check for Updates** runs the same check on demand, and you can turn off the launch check in **Settings**.
+
+Update the Windows server and Ubuntu client to the same version.
+
+| How you run it | What updating does |
+| --- | --- |
+| `BroadcastServer.exe` | Replaces the exe and restarts. The old file is removed on the next launch |
+| Installed with `install_ubuntu.sh` | Replaces the app folder, updates Python packages if needed, and restarts |
+| From source, or a PyInstaller build on Ubuntu | Tells you a new version exists and opens the release page |
+
+If an update fails, your current version keeps working. The Ubuntu updater doesn't change system files such as the driver setup or root helper. If a release changes those, its notes will ask you to rerun `install_ubuntu.sh`.
+
+The updater only downloads over HTTPS from GitHub, and it checks each file against the release's `SHA256SUMS.txt`. This detects corrupted or altered downloads, but the checksums come from the same GitHub release as the files. Anyone who gains control of the GitHub account could therefore publish a malicious update, so protect the account with two-factor authentication.
 
 ## Security
 
@@ -144,6 +165,53 @@ Run this end to end on the real setup. To exercise a real audio path, record and
 | 12 | Occupy port 9000, then start the camera | Red, naming the process that holds the port |
 | 13 | Close NVIDIA Broadcast while streaming | The camera reports an error; the microphone is handled independently |
 
+## Publishing a release
+
+Releases are built and published automatically by [.github/workflows/release.yml](.github/workflows/release.yml). You never upload files by hand.
+
+1. Set the new version in `shared/version.py`.
+2. Commit, tag and push. The tag must match the version:
+   ```bash
+   git add -A
+   git commit -m "Release 0.1.0"
+   git tag v0.1.0
+   git push origin main v0.1.0
+   ```
+
+GitHub then builds the exe, runs the tests, signs the exe if signing is set up, and publishes the release with all three files. Watch it on the repository's **Actions** tab. If the tag and `shared/version.py` don't match, or a test fails, nothing is published.
+
+To build the same files locally without publishing, run `powershell -ExecutionPolicy Bypass -File scripts\build_release.ps1`. They're written to `dist\release`.
+
+## Code signing
+
+Signing uses [Azure Artifact Signing](https://learn.microsoft.com/azure/artifact-signing/), formerly Trusted Signing. This is a different product from Azure Artifacts, the package feed service. You need an Artifact Signing account, a completed identity validation and a **Public Trust** certificate profile.
+
+Until signing is set up, releases are published unsigned and the workflow shows a warning. Once it's set up, a signing failure stops the release, so an unsigned exe can't slip out.
+
+GitHub signs in to Azure with OpenID Connect, so no password or secret is stored.
+
+1. **Create an app.** In Microsoft Entra ID, open **App registrations**, create one named `nvidia-broadcast-bridge-release`, and note its **Application (client) ID** and **Directory (tenant) ID**.
+2. **Trust this workflow.** In that app, open **Certificates & secrets > Federated credentials > Add credential**, choose **GitHub Actions deploying Azure resources**, and enter:
+   - Organization: `novawaver`
+   - Repository: `nova-cam-broadcast`
+   - Entity: **Environment**
+   - Environment: `release`
+3. **Grant signing.** On your certificate profile, open **Access control (IAM)** and assign the **Artifact Signing Certificate Profile Signer** role to the app. Search for it by name, because only users are listed by default.
+4. **Configure the repository.** In GitHub, open **Settings > Secrets and variables > Actions > Variables** and add these repository variables:
+
+   | Variable | Value |
+   | --- | --- |
+   | `AZURE_CLIENT_ID` | Application (client) ID from step 1 |
+   | `AZURE_TENANT_ID` | Directory (tenant) ID from step 1 |
+   | `AZURE_SUBSCRIPTION_ID` | The subscription that holds the signing account |
+   | `ARTIFACT_SIGNING_ENDPOINT` | The account's endpoint, such as `https://eus.codesigning.azure.net/` |
+   | `ARTIFACT_SIGNING_ACCOUNT` | The signing account name |
+   | `ARTIFACT_SIGNING_PROFILE` | The certificate profile name |
+
+   None of these are secrets. Setting `ARTIFACT_SIGNING_ACCOUNT` is what switches signing on, so add it last.
+
+Signing proves who published the exe, but it doesn't remove the SmartScreen warning straight away. SmartScreen builds reputation as people download and run a file, so a new release can still show the warning at first.
+
 ## Development
 
 ```bash
@@ -157,6 +225,6 @@ The tests cover parsing, command construction and worker supervision with a stan
 shared/          configuration, logging, FFmpeg process control, worker base, Qt widgets
 windows-server/  GUI, device detection, TCP port monitor, stream supervision
 ubuntu-client/   GUI, camera and microphone devices, reconnection, diagnostics
-scripts/         installer, build scripts, privileged helper, polkit policy
+scripts/         installer, build and release scripts, privileged helper, polkit policy
 tests/           automated tests
 ```

@@ -35,6 +35,8 @@ class ServerSettings(JsonSettings):
     bind_address: str = "0.0.0.0"
     ffmpeg_path: str = ""
     minimize_to_tray: bool = False
+    check_for_updates: bool = True
+    skipped_version: str = ""
 
 
 def _launch_command() -> str:

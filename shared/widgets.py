@@ -93,7 +93,7 @@ class StreamCard(QFrame):
 
         self.form = QFormLayout()
         self.form.setContentsMargins(0, 0, 0, 0)
-        self.form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        self.form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
 
         self.dot = StatusDot()
         self.status = QLabel(labels[StreamState.STOPPED])

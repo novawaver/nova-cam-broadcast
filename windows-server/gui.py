@@ -15,6 +15,8 @@ import settings as settings_module
 from shared.config import APP_NAME, AUDIO_SAMPLE_RATE
 from shared.process import find_ffmpeg
 from shared.stream_worker import StreamState
+from shared.update_ui import UpdateController
+from shared.version import __version__
 from shared.widgets import STYLESHEET, LogPanel, StreamCard, make_icon
 from stream_manager import CAMERA, MICROPHONE, StreamManager
 
@@ -63,6 +65,8 @@ class SettingsDialog(QDialog):
         self.tray.setChecked(settings.minimize_to_tray)
         self.startup = QCheckBox("Launch when I sign in to Windows")
         self.startup.setChecked(settings_module.launch_at_startup_enabled())
+        self.updates = QCheckBox("Check for updates on launch")
+        self.updates.setChecked(settings.check_for_updates)
 
         form = QFormLayout()
         form.addRow("Width", self.width_box)
@@ -75,6 +79,7 @@ class SettingsDialog(QDialog):
         form.addRow("FFmpeg", ffmpeg_row)
         form.addRow(self.tray)
         form.addRow(self.startup)
+        form.addRow(self.updates)
 
         note = QLabel("Changes apply the next time a stream starts.")
         note.setObjectName("muted")
@@ -114,6 +119,7 @@ class SettingsDialog(QDialog):
         s.bind_address = self.bind_address.text().strip() or "0.0.0.0"
         s.ffmpeg_path = self.ffmpeg_path.text().strip()
         s.minimize_to_tray = self.tray.isChecked()
+        s.check_for_updates = self.updates.isChecked()
         try:
             settings_module.set_launch_at_startup(self.startup.isChecked())
         except OSError as exc:
@@ -127,6 +133,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.settings = settings
         self._quitting = False
+        self.restart_command = None  # set when an update needs a relaunch
         self._states = {CAMERA: StreamState.STOPPED, MICROPHONE: StreamState.STOPPED}
 
         self.bridge = Bridge()
@@ -137,7 +144,7 @@ class MainWindow(QMainWindow):
             settings, self.bridge.state_changed.emit, self.bridge.log_line.emit
         )
 
-        self.setWindowTitle(f"{APP_NAME} — Windows Server")
+        self.setWindowTitle(f"{APP_NAME} {__version__} — Windows Server")
         self.setWindowIcon(make_icon())
         self.setStyleSheet(STYLESHEET)
         self.resize(500, 720)
@@ -178,6 +185,8 @@ class MainWindow(QMainWindow):
         tools_row = QHBoxLayout()
         tools_row.addWidget(refresh)
         tools_row.addWidget(settings_button)
+        updates_button = QPushButton("Check for Updates")
+        tools_row.addWidget(updates_button)
 
         self.connection_label = QLabel()
         self.logs = LogPanel()
@@ -194,10 +203,14 @@ class MainWindow(QMainWindow):
         root.setLayout(layout)
         self.setCentralWidget(root)
 
+        self.updates = UpdateController(self, settings, self._restart_for_update)
+        updates_button.clicked.connect(lambda: self.updates.check(manual=True))
+
         self._create_tray()
         self._refresh_info()
         self._update_connection()
         self._detect_devices()
+        self.updates.start()
 
     # --- tray -----------------------------------------------------------------
 
@@ -226,6 +239,10 @@ class MainWindow(QMainWindow):
     def _show_window(self) -> None:
         self.showNormal()
         self.activateWindow()
+
+    def _restart_for_update(self, command: list) -> None:
+        self.restart_command = command
+        self._quit()
 
     def _quit(self) -> None:
         self._quitting = True

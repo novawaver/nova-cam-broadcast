@@ -55,6 +55,7 @@ def run_gui(args, settings: ServerSettings) -> int:
     from PySide6.QtWidgets import QApplication, QMessageBox
 
     from gui import MainWindow
+    from shared import updater
     from shared.config import APP_NAME
     from shared.widgets import acquire_single_instance, make_icon
 
@@ -72,7 +73,9 @@ def run_gui(args, settings: ServerSettings) -> int:
     if not (args.minimized and window.tray is not None):
         window.show()
     code = app.exec()
-    del lock
+    lock.unlock()  # the relaunched app must be able to take the lock
+    if window.restart_command:
+        updater.relaunch(window.restart_command)
     return code
 
 

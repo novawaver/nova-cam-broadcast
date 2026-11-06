@@ -76,7 +76,7 @@ def build_microphone_command(ffmpeg: str, s) -> list[str]:
 def summarize_error(tail: list[str]) -> str:
     """Turn FFmpeg's last output into a short user-facing reason."""
     text = "\n".join(tail)
-    if "Could not find" in text and "device" in text:
+    if ("Could not find" in text and "device" in text) or "none found" in text:
         return "Device not found. Is NVIDIA Broadcast running?"
     if "Could not set video options" in text or "Could not find video mode" in text:
         return "The camera does not support this resolution/FPS."
