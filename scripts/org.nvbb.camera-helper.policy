@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <vendor>NVIDIA Broadcast Bridge</vendor>
+  <action id="org.nvbb.camera-helper">
+    <description>Create the NVIDIA Broadcast virtual camera</description>
+    <message>Authentication is required to create the virtual camera</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/local/libexec/nvbb-camera-helper</annotate>
+  </action>
+</policyconfig>

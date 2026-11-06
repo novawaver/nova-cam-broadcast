@@ -1,0 +1,28 @@
+#!/bin/sh
+# Creates /dev/video10. This is the only code in the project that runs as root.
+# It takes no arguments and is installed root-owned, so the polkit action that
+# launches it grants exactly this operation and nothing more.
+set -eu
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+
+DEVICE=/dev/video10
+LABEL="NVIDIA Broadcast"
+
+[ "$#" -eq 0 ] || { echo "This helper takes no arguments." >&2; exit 2; }
+[ ! -e "$DEVICE" ] || exit 0
+
+if [ -d /sys/module/v4l2loopback ]; then
+    # Already loaded, possibly in use by another application. Add a device
+    # next to the existing ones; never reload the module.
+    if ! command -v v4l2loopback-ctl >/dev/null 2>&1; then
+        echo "v4l2loopback is loaded without $DEVICE, and v4l2loopback-ctl is missing." >&2
+        exit 1
+    fi
+    v4l2loopback-ctl add -n "$LABEL" -x 1 "$DEVICE"
+else
+    modprobe v4l2loopback devices=1 video_nr=10 card_label="$LABEL" exclusive_caps=1
+fi
+
+udevadm settle --timeout=5 || true
+[ -e "$DEVICE" ] || { echo "$DEVICE did not appear." >&2; exit 1; }
